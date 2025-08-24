@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+
+{% block body_class %}home{% endblock %}
+
+{% block content %}
+<div class="home-container">
+    <div class="hero-section">
+        <h1 class="hero-title">Claude API 中转站</h1>
+        <p class="hero-subtitle">高效、安全、可靠的Claude API代理服务</p>
+        <div class="hero-description">
+            <p>提供完整的API密钥管理、使用统计和配额控制功能，让您轻松管理Claude API的使用。</p>
+        </div>
+    </div>
+    
+    <div class="features-section">
+        <div class="grid grid-cols-3">
+            <div class="feature-card">
+                <div class="feature-icon">🔑</div>
+                <h3>密钥管理</h3>
+                <p>安全的API密钥生成、管理和权限控制系统</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>使用统计</h3>
+                <p>详细的Token使用统计和可视化分析报告</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h3>高性能代理</h3>
+                <p>快速、稳定的API请求转发和响应处理</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="access-section">
+        <div class="grid grid-cols-2">
+            <div class="access-card">
+                <div class="access-header">
+                    <h3>用户访问</h3>
+                    <span class="access-badge user">用户</span>
+                </div>
+                <p>查看您的API使用情况、配额状态和详细日志</p>
+                <div class="access-info">
+                    <p><strong>需要：</strong>有效的API密钥</p>
+                    <p><strong>功能：</strong>使用统计、日志查看、配额监控</p>
+                </div>
+                <a href="/user-login" class="btn btn-primary">进入用户面板</a>
+                <div class="access-note">
+                    <small>请在请求头中包含您的API密钥</small>
+                </div>
+            </div>
+            
+            <div class="access-card">
+                <div class="access-header">
+                    <h3>管理员访问</h3>
+                    <span class="access-badge admin">管理员</span>
+                </div>
+                <p>管理所有API密钥、查看系统统计和配置设置</p>
+                <div class="access-info">
+                    <p><strong>需要：</strong>管理员凭据</p>
+                    <p><strong>功能：</strong>密钥管理、系统监控、用户管理</p>
+                </div>
+                <a href="/admin/login" class="btn btn-secondary">管理员登录</a>
+                <div class="access-note">
+                    <small>仅限授权管理员访问</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="info-section">
+        <div class="info-card">
+            <h3>如何使用</h3>
+            <ol class="usage-steps">
+                <li>
+                    <strong>获取API密钥：</strong>
+                    联系管理员获取您专属的API密钥
+                </li>
+                <li>
+                    <strong>配置环境：</strong>
+                    设置 <code>ANTHROPIC_API_KEY</code> 和 <code>ANTHROPIC_BASE_URL</code>
+                </li>
+                <li>
+                    <strong>开始使用：</strong>
+                    像使用官方API一样发送请求到中转站
+                </li>
+                <li>
+                    <strong>监控使用：</strong>
+                    通过用户面板查看使用情况和统计数据
+                </li>
+            </ol>
+        </div>
+        
+        <div class="info-card">
+            <h3>配置示例</h3>
+            <div class="code-block">
+                <pre><code># 环境变量配置
+export ANTHROPIC_API_KEY="sk-proxy-xxxxxxxxxxxx"
+export ANTHROPIC_BASE_URL="http://relay-station:8000"
+
+# Python 代码示例
+import anthropic
+
+client = anthropic.Anthropic(
+    api_key="sk-proxy-xxxxxxxxxxxx",
+    base_url="http://relay-station:8000"
+)
+
+response = client.messages.create(
+    model="claude-3-5-sonnet-20241022",
+    max_tokens=1000,
+    messages=[{
+        "role": "user", 
+        "content": "Hello, Claude!"
+    }]
+)</code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.home-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-xl) var(--spacing-md);
+}
+
+.hero-section {
+    text-align: center;
+    padding: var(--spacing-2xl) 0;
+    margin-bottom: var(--spacing-2xl);
+}
+
+.hero-title {
+    font-size: 3rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: var(--spacing-md);
+}
+
+.hero-subtitle {
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-lg);
+}
+
+.hero-description {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.features-section {
+    margin-bottom: var(--spacing-2xl);
+}
+
+.feature-card {
+    text-align: center;
+    padding: var(--spacing-xl);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    transition: all 0.3s ease;
+}
+
+.feature-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+}
+
+.feature-icon {
+    font-size: 3rem;
+    margin-bottom: var(--spacing-md);
+}
+
+.feature-card h3 {
+    margin-bottom: var(--spacing-sm);
+    color: var(--text-primary);
+}
+
+.access-section {
+    margin-bottom: var(--spacing-2xl);
+}
+
+.access-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    transition: all 0.3s ease;
+}
+
+.access-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.access-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+}
+
+.access-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.access-badge {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.access-badge.user {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+}
+
+.access-badge.admin {
+    background: rgba(147, 51, 234, 0.1);
+    color: var(--accent-secondary);
+}
+
+.access-info {
+    margin: var(--spacing-md) 0;
+    padding: var(--spacing-md);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+}
+
+.access-info p {
+    margin-bottom: var(--spacing-xs);
+    font-size: 0.875rem;
+}
+
+.access-info p:last-child {
+    margin-bottom: 0;
+}
+
+.access-note {
+    margin-top: var(--spacing-sm);
+    text-align: center;
+}
+
+.access-note small {
+    color: var(--text-muted);
+}
+
+.info-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-xl);
+}
+
+.info-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+}
+
+.info-card h3 {
+    margin-bottom: var(--spacing-md);
+    color: var(--text-primary);
+}
+
+.usage-steps {
+    padding-left: var(--spacing-md);
+}
+
+.usage-steps li {
+    margin-bottom: var(--spacing-md);
+    line-height: 1.6;
+}
+
+.usage-steps li:last-child {
+    margin-bottom: 0;
+}
+
+.code-block {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    overflow-x: auto;
+}
+
+.code-block pre {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.code-block code {
+    color: var(--text-primary);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .hero-title {
+        font-size: 2rem;
+    }
+    
+    .grid-cols-3 {
+        grid-template-columns: 1fr;
+    }
+    
+    .grid-cols-2 {
+        grid-template-columns: 1fr;
+    }
+    
+    .info-section {
+        grid-template-columns: 1fr;
+    }
+    
+    .feature-card,
+    .access-card,
+    .info-card {
+        padding: var(--spacing-lg);
+    }
+}
+
+@media (max-width: 480px) {
+    .home-container {
+        padding: var(--spacing-lg) var(--spacing-sm);
+    }
+    
+    .hero-section {
+        padding: var(--spacing-lg) 0;
+    }
+    
+    .hero-title {
+        font-size: 1.75rem;
+    }
+    
+    .code-block pre {
+        font-size: 0.75rem;
+    }
+}
+</style>
+{% endblock %}

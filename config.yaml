@@ -1,0 +1,88 @@
+# Claude Relay Station Configuration
+
+app:
+  name: claude-relay-station
+  version: 0.1.0
+  description: Claude Code API Relay Station
+
+# Upstream API Configuration (Third-party APIs)
+upstream:
+  primary:
+    name: "Anthropic Claude API"
+    url: "${UPSTREAM_API_URL}"
+    api_key: "${UPSTREAM_API_KEY}"
+    timeout: 60
+    max_retries: 3
+    
+  # Future: Support multiple upstream providers
+  # secondary:
+  #   name: "Alternative API"
+  #   url: "${ALT_API_URL}"
+  #   api_key: "${ALT_API_KEY}"
+
+# Admin Access (from config file, not database)
+admin:
+  username: "${ADMIN_USERNAME}"
+  password: "${ADMIN_PASSWORD}"
+  
+# API Key Settings
+api_keys:
+  prefix: "sk-proxy-"
+  default_limit: 1000000  # 1M tokens
+  warning_threshold: 0.8  # 80% usage warning
+  
+# Rate Limiting
+rate_limit:
+  default:
+    requests: 100
+    period: 60  # seconds
+  by_tier:
+    basic:
+      requests: 100
+      period: 60
+    premium:
+      requests: 1000
+      period: 60
+    unlimited:
+      requests: -1  # No limit
+      period: 60
+
+# Logging
+logging:
+  level: "${LOG_LEVEL}"
+  format: "json"
+  outputs:
+    - console
+    - file
+  file:
+    path: "logs/relay.log"
+    rotation: "daily"
+    retention: 7  # days
+
+# Monitoring
+monitoring:
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+  health:
+    enabled: true
+    path: "/health"
+    
+# Security
+security:
+  cors:
+    enabled: true
+    origins: ["*"]
+    methods: ["*"]
+    headers: ["*"]
+  
+  encryption:
+    algorithm: "AES-256-GCM"
+    
+# Features
+features:
+  token_counting: true
+  request_logging: true
+  response_caching: false
+  auto_retry: true

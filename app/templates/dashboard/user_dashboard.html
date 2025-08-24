@@ -1,0 +1,485 @@
+{% extends "base.html" %}
+
+{% block body_class %}user-dashboard{% endblock %}
+
+{% block nav %}
+<a href="/user-dashboard" class="active">概览</a>
+<a href="/user-dashboard/stats">统计</a>
+<a href="/user-dashboard/logs">日志</a>
+<a href="#" onclick="logoutUser()" class="logout-btn">退出</a>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>用户仪表板</h2>
+    <p class="text-muted">API密钥: <code id="apiKeyDisplay">加载中...</code></p>
+</div>
+
+<!-- Loading State -->
+<div id="loadingState" class="loading-container">
+    <div class="loading-spinner"></div>
+    <p>正在加载您的使用数据...</p>
+</div>
+
+<!-- Main Dashboard Content -->
+<div id="dashboardContent" style="display: none;">
+    <!-- Overview Stats -->
+    <div class="grid grid-cols-4 mb-lg">
+        <div class="stat-card">
+            <div id="usagePercent" class="stat-value">0%</div>
+            <div class="stat-label">使用率</div>
+            <div class="progress mt-sm">
+                <div id="usageProgressBar" class="progress-bar" style="width: 0%"></div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div id="totalRequests" class="stat-value">0</div>
+            <div class="stat-label">总请求数</div>
+            <div class="stat-change positive" id="requestsChange"></div>
+        </div>
+        
+        <div class="stat-card">
+            <div id="totalTokens" class="stat-value">0</div>
+            <div class="stat-label">Token使用量</div>
+            <div class="stat-change positive" id="tokensChange"></div>
+        </div>
+        
+        <div class="stat-card">
+            <div id="avgResponseTime" class="stat-value">0ms</div>
+            <div class="stat-label">平均响应时间</div>
+            <div class="stat-change positive" id="responseTimeChange"></div>
+        </div>
+    </div>
+
+    <!-- Quota Status Card -->
+    <div class="card mb-lg">
+        <div class="card-header">
+            <h3 class="card-title">配额状态</h3>
+            <div id="keyStatus" class="status status-active">活跃</div>
+        </div>
+        
+        <div class="grid grid-cols-2">
+            <div>
+                <div class="mb-md">
+                    <label class="form-label">Token限制</label>
+                    <p id="tokenLimit" class="text-lg">加载中...</p>
+                </div>
+                
+                <div class="mb-md">
+                    <label class="form-label">已使用</label>
+                    <p id="tokenUsed" class="text-lg">加载中...</p>
+                </div>
+                
+                <div>
+                    <label class="form-label">剩余</label>
+                    <p id="tokenRemaining" class="text-lg text-success">加载中...</p>
+                </div>
+            </div>
+            
+            <div>
+                <div class="mb-md">
+                    <label class="form-label">限流等级</label>
+                    <p id="rateLimitTier" class="text-lg">加载中...</p>
+                </div>
+                
+                <div class="mb-md">
+                    <label class="form-label">创建时间</label>
+                    <p id="createdAt" class="text-sm text-muted">加载中...</p>
+                </div>
+                
+                <div id="expiresAtContainer" style="display: none;">
+                    <label class="form-label">过期时间</label>
+                    <p id="expiresAt" class="text-sm text-warning">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Usage Trend Chart -->
+    <div class="card mb-lg">
+        <div class="card-header">
+            <h3 class="card-title">近7天使用趋势</h3>
+            <div class="card-actions">
+                <button class="btn btn-secondary btn-sm" onclick="refreshData()">刷新数据</button>
+            </div>
+        </div>
+        
+        <div class="chart-container" style="height: 300px;">
+            <canvas id="usageChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">最近活动</h3>
+            <a href="/user-dashboard/logs" class="btn btn-secondary btn-sm">查看全部</a>
+        </div>
+        
+        <div id="recentActivity" class="activity-list">
+            <div class="loading-item">正在加载活动数据...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Error State -->
+<div id="errorState" class="error-container" style="display: none;">
+    <div class="error-card">
+        <h3>无法加载数据</h3>
+        <p id="errorMessage">请检查您的API密钥是否有效</p>
+        <div class="error-actions">
+            <button class="btn btn-primary" onclick="retryLoad()">重试</button>
+            <button class="btn btn-secondary" onclick="logoutUser()">重新登录</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.dashboard-header {
+    margin-bottom: var(--spacing-xl);
+}
+
+.dashboard-header h2 {
+    margin-bottom: var(--spacing-sm);
+}
+
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-2xl);
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border);
+    border-top: 3px solid var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: var(--spacing-md);
+}
+
+.error-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-2xl);
+}
+
+.error-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--error);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-2xl);
+    text-align: center;
+    max-width: 400px;
+}
+
+.error-card h3 {
+    color: var(--error);
+    margin-bottom: var(--spacing-md);
+}
+
+.error-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: center;
+    margin-top: var(--spacing-lg);
+}
+
+.loading-item {
+    padding: var(--spacing-md);
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.activity-list {
+    min-height: 100px;
+}
+
+.activity-item {
+    display: flex;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md) 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+}
+
+.activity-content {
+    flex: 1;
+}
+
+.activity-content p:last-child {
+    margin: 0;
+}
+
+.logout-btn {
+    color: var(--error) !important;
+}
+
+.logout-btn:hover {
+    background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+.text-lg {
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.text-sm {
+    font-size: 0.875rem;
+}
+
+.text-muted {
+    color: var(--text-muted);
+}
+
+.text-success {
+    color: var(--success);
+}
+
+.text-warning {
+    color: var(--warning);
+}
+
+@media (max-width: 768px) {
+    .grid-cols-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .error-actions {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 480px) {
+    .grid-cols-4 {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentApiKey = '';
+let chartInstance = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Get API key from session storage
+    currentApiKey = sessionStorage.getItem('current_api_key');
+    
+    if (!currentApiKey) {
+        // No API key found, redirect to login
+        window.location.href = '/user-login';
+        return;
+    }
+    
+    // Display masked API key
+    document.getElementById('apiKeyDisplay').textContent = 
+        currentApiKey.substring(0, 12) + '***';
+    
+    // Load dashboard data
+    loadDashboardData();
+});
+
+async function loadDashboardData() {
+    try {
+        showLoading();
+        
+        // Load quota information
+        const quotaResponse = await apiRequest('/api/usage/quota');
+        updateQuotaDisplay(quotaResponse);
+        
+        // Load usage statistics
+        const statsResponse = await apiRequest('/api/usage');
+        updateStatsDisplay(statsResponse);
+        
+        // Load daily usage for chart
+        const dailyResponse = await apiRequest('/api/usage/daily?days=7');
+        updateUsageChart(dailyResponse);
+        
+        // Load recent logs for activity
+        const logsResponse = await apiRequest('/api/usage/logs?limit=5');
+        updateRecentActivity(logsResponse);
+        
+        showDashboard();
+    } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+        showError(error.message || '加载数据失败');
+    }
+}
+
+function updateQuotaDisplay(quota) {
+    document.getElementById('tokenLimit').textContent = formatNumber(quota.token_limit);
+    document.getElementById('tokenUsed').textContent = formatNumber(quota.token_used);
+    document.getElementById('tokenRemaining').textContent = formatNumber(quota.token_remaining);
+    document.getElementById('rateLimitTier').textContent = quota.rate_limit_tier.toUpperCase();
+    
+    // Update status
+    const statusElement = document.getElementById('keyStatus');
+    if (quota.is_active) {
+        statusElement.className = 'status status-active';
+        statusElement.textContent = '活跃';
+    } else {
+        statusElement.className = 'status status-inactive';
+        statusElement.textContent = '已禁用';
+    }
+    
+    // Update usage percentage
+    const usagePercent = quota.usage_percentage;
+    document.getElementById('usagePercent').textContent = usagePercent + '%';
+    document.getElementById('usageProgressBar').style.width = usagePercent + '%';
+    
+    // Show expiration if exists
+    if (quota.expires_at) {
+        document.getElementById('expiresAtContainer').style.display = 'block';
+        document.getElementById('expiresAt').textContent = 
+            new Date(quota.expires_at).toLocaleString('zh-CN');
+    }
+}
+
+function updateStatsDisplay(stats) {
+    document.getElementById('totalRequests').textContent = formatNumber(stats.total_requests || 0);
+    document.getElementById('totalTokens').textContent = formatNumber(stats.total_tokens || 0);
+    document.getElementById('avgResponseTime').textContent = Math.round(stats.avg_response_time_ms || 0) + 'ms';
+    
+    // Update change indicators (mock data for now)
+    document.getElementById('requestsChange').textContent = '+' + (stats.total_requests > 0 ? '12%' : '0%') + ' 本月';
+    document.getElementById('tokensChange').textContent = '+' + Math.round((stats.total_tokens || 0) / 10000) + '%';
+    document.getElementById('responseTimeChange').textContent = '-5% 本周';
+}
+
+function updateUsageChart(dailyData) {
+    const chartData = {
+        labels: dailyData.map(day => {
+            const date = new Date(day.date);
+            return (date.getMonth() + 1) + '/' + date.getDate();
+        }),
+        values: dailyData.map(day => day.tokens || 0)
+    };
+    
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+    
+    chartInstance = window.claudeRelay.createUsageChart('usageChart', chartData);
+}
+
+function updateRecentActivity(logs) {
+    const activityContainer = document.getElementById('recentActivity');
+    
+    if (!logs || logs.length === 0) {
+        activityContainer.innerHTML = '<div class="loading-item">暂无使用记录</div>';
+        return;
+    }
+    
+    let activityHtml = '';
+    logs.forEach(log => {
+        const statusIcon = log.is_error ? '❌' : '✅';
+        const statusClass = log.is_error ? 'status-error' : 'status-active';
+        
+        activityHtml += `
+            <div class="activity-item">
+                <div class="activity-icon">
+                    <span class="${statusClass}">${statusIcon}</span>
+                </div>
+                <div class="activity-content">
+                    <p>API请求 - ${log.request_method} ${log.request_path}</p>
+                    <p class="text-sm text-muted">
+                        ${new Date(log.created_at).toLocaleString('zh-CN')} | 
+                        ${log.total_tokens} tokens | 
+                        ${Math.round(log.response_time_ms)}ms
+                    </p>
+                </div>
+            </div>
+        `;
+    });
+    
+    activityContainer.innerHTML = activityHtml;
+}
+
+async function apiRequest(endpoint) {
+    const response = await fetch(endpoint, {
+        headers: {
+            'Authorization': `Bearer ${currentApiKey}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    if (!response.ok) {
+        if (response.status === 401) {
+            throw new Error('API密钥无效或已过期');
+        } else if (response.status === 429) {
+            throw new Error('请求过于频繁，请稍后再试');
+        } else {
+            throw new Error('网络错误');
+        }
+    }
+    
+    return response.json();
+}
+
+function showLoading() {
+    document.getElementById('loadingState').style.display = 'flex';
+    document.getElementById('dashboardContent').style.display = 'none';
+    document.getElementById('errorState').style.display = 'none';
+}
+
+function showDashboard() {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('dashboardContent').style.display = 'block';
+    document.getElementById('errorState').style.display = 'none';
+}
+
+function showError(message) {
+    document.getElementById('errorMessage').textContent = message;
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('dashboardContent').style.display = 'none';
+    document.getElementById('errorState').style.display = 'flex';
+}
+
+function logoutUser() {
+    sessionStorage.removeItem('current_api_key');
+    localStorage.removeItem('user_api_key');
+    window.location.href = '/user-login';
+}
+
+function retryLoad() {
+    loadDashboardData();
+}
+
+function refreshData() {
+    loadDashboardData();
+    window.claudeRelay.showAlert('数据已刷新', 'success');
+}
+
+function formatNumber(num) {
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+}
+</script>
+{% endblock %}

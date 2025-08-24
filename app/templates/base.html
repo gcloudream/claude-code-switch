@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ page_title }} - Claude API中转站{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/dashboard.css') }}">
+    {% block extra_css %}{% endblock %}
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='images/favicon.svg') }}">
+    <meta name="theme-color" content="#6366f1">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    {% block header %}
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <h1 class="header-title">
+                    <a href="/">Claude API中转站</a>
+                </h1>
+                <nav class="header-nav">
+                    {% block nav %}{% endblock %}
+                </nav>
+            </div>
+        </div>
+    </header>
+    {% endblock %}
+
+    <main class="main">
+        <div class="container">
+            {% block alerts %}
+            {% if error %}
+            <div class="alert alert-error">
+                {{ error }}
+            </div>
+            {% endif %}
+            {% if success %}
+            <div class="alert alert-success">
+                {{ success }}
+            </div>
+            {% endif %}
+            {% endblock %}
+
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    {% block footer %}
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Claude API中转站 v0.1.0</p>
+        </div>
+    </footer>
+    {% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', path='js/main.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

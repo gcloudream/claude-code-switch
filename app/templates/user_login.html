@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户登录 - Claude API中转站</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/dashboard.css') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='images/favicon.svg') }}">
+</head>
+<body class="user-login-page">
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <h1>Claude API中转站</h1>
+                <h2>用户登录</h2>
+                <p class="text-muted">请输入您的API密钥以查看使用情况</p>
+            </div>
+            
+            <div id="error-message" class="alert alert-error" style="display: none;">
+                <span id="error-text"></span>
+            </div>
+            
+            <form id="userLoginForm" class="login-form">
+                <div class="form-group">
+                    <label for="apiKey" class="form-label">API密钥</label>
+                    <input type="password" id="apiKey" name="apiKey" class="form-input" 
+                           placeholder="sk-proxy-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" required autofocus>
+                    <div class="input-help">
+                        <small class="text-muted">输入管理员为您分配的API密钥</small>
+                        <button type="button" class="btn-toggle-password" onclick="togglePassword()">
+                            <span id="toggle-icon">👁️</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" id="rememberKey">
+                        <span class="checkmark"></span>
+                        记住API密钥（保存到本地存储）
+                    </label>
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-lg login-btn">
+                    查看使用情况
+                </button>
+            </form>
+            
+            <div class="login-footer">
+                <p class="text-sm text-muted">
+                    <a href="/">← 返回首页</a> |
+                    <a href="/admin/login">管理员登录</a>
+                </p>
+                <div class="help-section">
+                    <h4>需要帮助？</h4>
+                    <ul>
+                        <li>如果您没有API密钥，请联系管理员获取</li>
+                        <li>API密钥格式：sk-proxy-xxxxxxxx</li>
+                        <li>遇到问题请检查密钥是否正确输入</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', path='js/main.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('userLoginForm');
+            const apiKeyInput = document.getElementById('apiKey');
+            const rememberKeyCheckbox = document.getElementById('rememberKey');
+            const loginBtn = document.querySelector('.login-btn');
+            const errorMessage = document.getElementById('error-message');
+            const errorText = document.getElementById('error-text');
+            
+            // Load saved API key if exists
+            const savedApiKey = localStorage.getItem('user_api_key');
+            if (savedApiKey) {
+                apiKeyInput.value = savedApiKey;
+                rememberKeyCheckbox.checked = true;
+            }
+            
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const apiKey = apiKeyInput.value.trim();
+                if (!apiKey) {
+                    showError('请输入API密钥');
+                    return;
+                }
+                
+                if (!apiKey.startsWith('sk-proxy-')) {
+                    showError('API密钥格式错误，应以 sk-proxy- 开头');
+                    return;
+                }
+                
+                // Show loading state
+                const originalText = loginBtn.textContent;
+                loginBtn.disabled = true;
+                loginBtn.innerHTML = '<span class="loading"></span> 验证中...';
+                hideError();
+                
+                try {
+                    // Test API key by trying to access dashboard
+                    const response = await fetch('/api/usage/quota', {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${apiKey}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        // API key is valid
+                        if (rememberKeyCheckbox.checked) {
+                            localStorage.setItem('user_api_key', apiKey);
+                        } else {
+                            localStorage.removeItem('user_api_key');
+                        }
+                        
+                        // Store API key in session storage for this session
+                        sessionStorage.setItem('current_api_key', apiKey);
+                        
+                        // Redirect to dashboard
+                        window.location.href = '/user-dashboard';
+                    } else if (response.status === 401) {
+                        showError('API密钥无效或已过期');
+                    } else if (response.status === 429) {
+                        showError('请求过于频繁，请稍后再试');
+                    } else {
+                        showError('验证失败，请检查网络连接');
+                    }
+                } catch (error) {
+                    console.error('Login error:', error);
+                    showError('网络错误，请稍后重试');
+                } finally {
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = originalText;
+                }
+            });
+            
+            function showError(message) {
+                errorText.textContent = message;
+                errorMessage.style.display = 'block';
+            }
+            
+            function hideError() {
+                errorMessage.style.display = 'none';
+            }
+            
+            // Auto-hide error after 5 seconds
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                        if (errorMessage.style.display === 'block') {
+                            setTimeout(() => {
+                                if (errorMessage.style.display === 'block') {
+                                    hideError();
+                                }
+                            }, 5000);
+                        }
+                    }
+                });
+            });
+            observer.observe(errorMessage, { attributes: true });
+        });
+        
+        function togglePassword() {
+            const apiKeyInput = document.getElementById('apiKey');
+            const toggleIcon = document.getElementById('toggle-icon');
+            
+            if (apiKeyInput.type === 'password') {
+                apiKeyInput.type = 'text';
+                toggleIcon.textContent = '🙈';
+            } else {
+                apiKeyInput.type = 'password';
+                toggleIcon.textContent = '👁️';
+            }
+        }
+    </script>
+</body>
+</html>
+
+<style>
+.user-login-page {
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-md);
+}
+
+.login-container {
+    width: 100%;
+    max-width: 480px;
+}
+
+.login-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-2xl);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.login-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: var(--spacing-xl);
+}
+
+.login-header h1 {
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: var(--spacing-sm);
+}
+
+.login-header h2 {
+    color: var(--text-secondary);
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-sm);
+}
+
+.login-form .form-group {
+    margin-bottom: var(--spacing-lg);
+}
+
+.input-help {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: var(--spacing-xs);
+}
+
+.btn-toggle-password {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: var(--spacing-xs);
+    border-radius: var(--radius-sm);
+    transition: all 0.2s ease;
+}
+
+.btn-toggle-password:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-wrapper input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent-primary);
+}
+
+.login-btn {
+    width: 100%;
+    padding: var(--spacing-md) var(--spacing-lg);
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.login-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(99, 102, 241, 0.25);
+}
+
+.login-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.login-footer {
+    margin-top: var(--spacing-xl);
+    text-align: center;
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--border);
+}
+
+.login-footer a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.login-footer a:hover {
+    color: var(--accent-primary);
+}
+
+.help-section {
+    margin-top: var(--spacing-lg);
+    text-align: left;
+}
+
+.help-section h4 {
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+    font-size: 0.875rem;
+}
+
+.help-section ul {
+    list-style: none;
+    padding: 0;
+}
+
+.help-section li {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin-bottom: var(--spacing-xs);
+    padding-left: var(--spacing-sm);
+    position: relative;
+}
+
+.help-section li::before {
+    content: '•';
+    color: var(--accent-primary);
+    position: absolute;
+    left: 0;
+}
+
+/* Mobile optimizations */
+@media (max-width: 480px) {
+    .user-login-page {
+        padding: var(--spacing-sm);
+    }
+    
+    .login-card {
+        padding: var(--spacing-xl);
+    }
+    
+    .login-header h1 {
+        font-size: 1.25rem;
+    }
+    
+    .login-header h2 {
+        font-size: 1.125rem;
+    }
+}
+</style>

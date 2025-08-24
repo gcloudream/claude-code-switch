@@ -1,0 +1,1133 @@
+{% extends "base.html" %}
+
+{% block body_class %}admin keys{% endblock %}
+
+{% block nav %}
+<a href="/admin/dashboard">概览</a>
+<a href="/admin/keys" class="active">密钥管理</a>
+<a href="/admin/logout" class="logout-btn">退出登录</a>
+{% endblock %}
+
+{% block content %}
+<div class="keys-header">
+    <div>
+        <h2>API密钥管理</h2>
+        <p class="text-muted">管理员：{{ admin_user }} | 总共 {{ api_keys|length }} 个密钥</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn btn-primary" onclick="showCreateKeyModal()">
+            <span class="icon">+</span>
+            创建新密钥
+        </button>
+    </div>
+</div>
+
+<!-- Filters and Search -->
+<div class="card mb-lg">
+    <div class="card-header">
+        <h3 class="card-title">筛选和搜索</h3>
+    </div>
+    
+    <div class="filters">
+        <div class="grid grid-cols-4">
+            <div class="form-group">
+                <label class="form-label">状态</label>
+                <select id="statusFilter" class="form-input" onchange="filterKeys()">
+                    <option value="">全部状态</option>
+                    <option value="active">活跃</option>
+                    <option value="inactive">已禁用</option>
+                    <option value="expired">已过期</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">限流等级</label>
+                <select id="tierFilter" class="form-input" onchange="filterKeys()">
+                    <option value="">全部等级</option>
+                    <option value="basic">基础</option>
+                    <option value="premium">高级</option>
+                    <option value="unlimited">无限制</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">使用率</label>
+                <select id="usageFilter" class="form-input" onchange="filterKeys()">
+                    <option value="">全部</option>
+                    <option value="high">高使用率 (>80%)</option>
+                    <option value="medium">中等使用率 (20-80%)</option>
+                    <option value="low">低使用率 (<20%)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">搜索</label>
+                <input type="text" id="searchInput" class="form-input" 
+                       placeholder="搜索名称或ID..." oninput="filterKeys()">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- API Keys Table -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">API密钥列表</h3>
+        <div class="card-actions">
+            <button class="btn btn-secondary btn-sm" onclick="refreshKeys()">刷新</button>
+            <button class="btn btn-secondary btn-sm" onclick="exportKeys()">导出CSV</button>
+        </div>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="table" id="keysTable">
+            <thead>
+                <tr>
+                    <th>名称</th>
+                    <th>密钥前缀</th>
+                    <th>状态</th>
+                    <th>使用情况</th>
+                    <th>限流等级</th>
+                    <th>创建时间</th>
+                    <th>最后使用</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for key in api_keys %}
+                <tr class="key-row" data-status="{{ 'active' if key.is_active else 'inactive' }}" 
+                    data-tier="{{ key.rate_limit_tier }}" data-usage="{{ key.usage_percentage }}">
+                    <td>
+                        <div class="key-name">
+                            <strong>{{ key.name }}</strong>
+                            {% if key.description %}
+                            <div class="key-description">{{ key.description[:50] }}{% if key.description|length > 50 %}...{% endif %}</div>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="key-info">
+                            <div class="key-display">
+                                <code class="key-prefix">{{ key.key_prefix }}***</code>
+                                <span class="key-security-notice">已隐藏</span>
+                            </div>
+                            <div class="key-actions">
+                                <button class="btn-copy copy-btn" data-copy="{{ key.id }}" title="复制密钥ID">
+                                    <span class="copy-icon">📋</span>
+                                    <span class="copy-text">ID</span>
+                                </button>
+                                <button class="btn-info btn-sm" onclick="showKeyInfo('{{ key.id }}')" title="密钥信息">
+                                    <span>ℹ️</span>
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="status-wrapper">
+                            <span class="status {% if key.is_active %}status-active{% else %}status-inactive{% endif %}">
+                                {% if key.is_active %}活跃{% else %}已禁用{% endif %}
+                            </span>
+                            {% if key.expires_at and key.expires_at < now %}
+                            <span class="status status-error">已过期</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="usage-info">
+                            <div class="usage-text">
+                                {{ key.token_used | format_number }} / {{ key.token_limit | format_number }}
+                                <span class="usage-percent">({{ key.usage_percentage }}%)</span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar" style="width: {{ key.usage_percentage }}%"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="tier-badge tier-{{ key.rate_limit_tier }}">{{ key.rate_limit_tier | title }}</span>
+                    </td>
+                    <td>
+                        <span class="timestamp">{{ key.created_at.strftime('%m-%d %H:%M') }}</span>
+                    </td>
+                    <td>
+                        <span class="timestamp">
+                            {% if key.last_used_at %}
+                                {{ key.last_used_at.strftime('%m-%d %H:%M') }}
+                            {% else %}
+                                从未使用
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="key-actions">
+                            <button class="btn btn-secondary btn-sm" onclick="viewKeyDetails('{{ key.id }}')">
+                                详情
+                            </button>
+                            {% if key.is_active %}
+                            <button class="btn btn-warning btn-sm" onclick="toggleKeyStatus('{{ key.id }}', false)">
+                                禁用
+                            </button>
+                            {% else %}
+                            <button class="btn btn-success btn-sm" onclick="toggleKeyStatus('{{ key.id }}', true)">
+                                启用
+                            </button>
+                            {% endif %}
+                            <button class="btn btn-danger btn-sm" onclick="confirmDeleteKey('{{ key.id }}', '{{ key.name }}')">
+                                删除
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    {% if not api_keys %}
+    <div class="empty-state">
+        <p class="text-muted">暂无API密钥</p>
+        <button class="btn btn-primary" onclick="showCreateKeyModal()">创建第一个密钥</button>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Create Key Modal -->
+<div id="createKeyModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>创建新API密钥</h3>
+            <button class="modal-close" onclick="closeCreateKeyModal()">&times;</button>
+        </div>
+        
+        <form id="createKeyForm" class="modal-body">
+            <div class="form-group">
+                <label class="form-label">密钥名称 *</label>
+                <input type="text" name="name" class="form-input" 
+                       placeholder="例如：用户John的密钥" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">描述</label>
+                <textarea name="description" class="form-input" rows="3" 
+                         placeholder="密钥的用途描述（可选）"></textarea>
+            </div>
+            
+            <div class="grid grid-cols-2">
+                <div class="form-group">
+                    <label class="form-label">Token限制</label>
+                    <input type="number" name="token_limit" class="form-input" 
+                           value="1000000" min="1000" step="1000">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">限流等级</label>
+                    <select name="rate_limit_tier" class="form-input">
+                        <option value="basic">基础 (100请求/分钟)</option>
+                        <option value="premium">高级 (500请求/分钟)</option>
+                        <option value="unlimited">无限制</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">有效期（天）</label>
+                <input type="number" name="expires_in_days" class="form-input" 
+                       placeholder="留空为永久有效" min="1" max="365">
+            </div>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeCreateKeyModal()">
+                    取消
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    创建密钥
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Key Details Modal -->
+<div id="keyDetailsModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>密钥详情</h3>
+            <button class="modal-close" onclick="closeKeyDetailsModal()">&times;</button>
+        </div>
+        <div id="keyDetailsContent" class="modal-body">
+            <!-- Content will be loaded here -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.keys-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--spacing-xl);
+}
+
+.keys-header h2 {
+    margin-bottom: var(--spacing-sm);
+}
+
+.header-actions .btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.filters {
+    padding: var(--spacing-md) 0;
+}
+
+.key-name strong {
+    display: block;
+    color: var(--text-primary);
+}
+
+.key-description {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin-top: 2px;
+}
+
+.key-prefix {
+    font-family: var(--font-mono);
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+}
+
+.key-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    min-width: 200px;
+}
+
+.key-display {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.key-security-notice {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+}
+
+.key-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+    align-items: center;
+}
+
+.btn-copy {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    transition: all 0.2s ease;
+    font-size: 0.75rem;
+}
+
+.btn-copy:hover {
+    color: var(--text-primary);
+    background: var(--accent-primary);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.btn-copy.copied {
+    background: var(--success);
+    color: white;
+}
+
+.copy-icon {
+    font-size: 0.875rem;
+}
+
+.copy-text {
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.btn-info {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    transition: all 0.2s ease;
+    font-size: 0.875rem;
+}
+
+.btn-info:hover {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+    transform: translateY(-1px);
+}
+
+.status-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.usage-info {
+    min-width: 150px;
+}
+
+.usage-text {
+    font-size: 0.875rem;
+    margin-bottom: 4px;
+}
+
+.usage-percent {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.tier-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.tier-basic { background: rgba(107, 114, 128, 0.1); color: var(--text-muted); }
+.tier-premium { background: rgba(59, 130, 246, 0.1); color: #60a5fa; }
+.tier-unlimited { background: rgba(147, 51, 234, 0.1); color: #a855f7; }
+
+.timestamp {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.key-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+}
+
+.key-actions .btn {
+    font-size: 0.75rem;
+    padding: var(--spacing-xs);
+}
+
+.logout-btn {
+    color: var(--error) !important;
+}
+
+.logout-btn:hover {
+    background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+    margin: 0;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-close:hover {
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: var(--spacing-lg);
+}
+
+.modal-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: flex-end;
+    margin-top: var(--spacing-lg);
+}
+
+.card-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-2xl);
+}
+
+.key-info-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
+.key-full-info {
+    background: var(--bg-tertiary);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+}
+
+.key-id-section, .key-display-section {
+    margin-bottom: var(--spacing-md);
+}
+
+.key-id-section:last-child, .key-display-section:last-child {
+    margin-bottom: 0;
+}
+
+.copyable-field {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-xs);
+}
+
+.key-id {
+    background: var(--bg-secondary);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    border: 1px solid var(--border);
+    flex: 1;
+}
+
+.key-prefix-display {
+    background: var(--bg-secondary);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    border: 1px solid var(--border);
+    margin-right: var(--spacing-sm);
+}
+
+.key-display-section {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+}
+
+.alert {
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-md);
+}
+
+.alert-warning {
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    color: var(--warning);
+}
+
+.full-key-display {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+    margin-top: var(--spacing-xs);
+}
+
+.full-key-container {
+    flex: 1;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--accent-primary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    position: relative;
+    overflow: hidden;
+}
+
+.full-key {
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    color: var(--accent-primary);
+    font-weight: 600;
+    word-break: break-all;
+    display: block;
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.key-warning {
+    margin-top: var(--spacing-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-sm);
+    text-align: center;
+}
+
+.key-warning small {
+    color: var(--error);
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .keys-header {
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
+    
+    .header-actions {
+        align-self: stretch;
+    }
+    
+    .header-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .key-actions {
+        flex-direction: column;
+    }
+    
+    .key-actions .btn {
+        width: 100%;
+    }
+    
+    .grid-cols-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .grid-cols-4 {
+        grid-template-columns: 1fr;
+    }
+    
+    .table {
+        font-size: 0.75rem;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let createKeyModal, keyDetailsModal;
+
+document.addEventListener('DOMContentLoaded', function() {
+    createKeyModal = document.getElementById('createKeyModal');
+    keyDetailsModal = document.getElementById('keyDetailsModal');
+    
+    // Setup create key form
+    const form = document.getElementById('createKeyForm');
+    form.addEventListener('submit', handleCreateKey);
+    
+    // Setup copy functionality for API key IDs
+    document.querySelectorAll('.copy-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const text = this.dataset.copy;
+            const copyIcon = this.querySelector('.copy-icon');
+            const copyText = this.querySelector('.copy-text');
+            
+            if (text) {
+                navigator.clipboard.writeText(text).then(() => {
+                    const originalIcon = copyIcon.textContent;
+                    const originalText = copyText.textContent;
+                    
+                    // Visual feedback
+                    this.classList.add('copied');
+                    copyIcon.textContent = '✓';
+                    copyText.textContent = '已复制';
+                    
+                    setTimeout(() => {
+                        this.classList.remove('copied');
+                        copyIcon.textContent = originalIcon;
+                        copyText.textContent = originalText;
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy: ', err);
+                    alert('复制失败，请手动选择复制');
+                });
+            }
+        });
+    });
+});
+
+function showCreateKeyModal() {
+    createKeyModal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeCreateKeyModal() {
+    createKeyModal.style.display = 'none';
+    document.body.style.overflow = 'auto';
+    document.getElementById('createKeyForm').reset();
+}
+
+function closeKeyDetailsModal() {
+    keyDetailsModal.style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+async function handleCreateKey(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData.entries());
+    
+    // Convert numeric fields
+    if (data.token_limit) data.token_limit = parseInt(data.token_limit);
+    if (data.expires_in_days) data.expires_in_days = parseInt(data.expires_in_days);
+    
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="loading"></span> 创建中...';
+    
+    try {
+        const response = await fetch('/admin/api-keys', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            window.claudeRelay.showAlert('密钥创建成功！', 'success');
+            closeCreateKeyModal();
+            showApiKeyResult(result);
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            window.claudeRelay.showAlert(result.detail || '创建失败', 'error');
+        }
+    } catch (error) {
+        console.error('Error creating API key:', error);
+        window.claudeRelay.showAlert('网络错误，请重试', 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+    }
+}
+
+function showApiKeyResult(keyData) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+    
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>API密钥创建成功</h3>
+                <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-success">
+                    密钥创建成功！请妥善保存以下信息，密钥只会显示这一次。
+                </div>
+                <div class="form-group">
+                    <label class="form-label">完整API密钥</label>
+                    <div class="full-key-display">
+                        <div class="full-key-container">
+                            <code class="full-key">${keyData.api_key}</code>
+                        </div>
+                        <button class="btn btn-primary copy-btn" data-copy="${keyData.api_key}">
+                            <span class="copy-icon">📋</span>
+                            <span class="copy-text">复制密钥</span>
+                        </button>
+                    </div>
+                    <div class="key-warning">
+                        <small>⚠️ 请立即复制并安全保存此密钥，它只会显示一次！</small>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2">
+                    <div>
+                        <label class="form-label">名称</label>
+                        <p>${keyData.name}</p>
+                    </div>
+                    <div>
+                        <label class="form-label">Token限制</label>
+                        <p>${keyData.token_limit.toLocaleString()}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+    
+    // Setup copy functionality for the new modal
+    const copyBtn = modal.querySelector('.copy-btn');
+    if (copyBtn) {
+        copyBtn.addEventListener('click', function() {
+            const text = this.dataset.copy;
+            const copyIcon = this.querySelector('.copy-icon');
+            const copyText = this.querySelector('.copy-text');
+            
+            console.log('Attempting to copy text:', text); // Debug log
+            
+            // Try modern clipboard API first
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    const originalIcon = copyIcon.textContent;
+                    const originalText = copyText.textContent;
+                    
+                    // Visual feedback
+                    this.classList.add('copied');
+                    copyIcon.textContent = '✓';
+                    copyText.textContent = '已复制!';
+                    
+                    setTimeout(() => {
+                        this.classList.remove('copied');
+                        copyIcon.textContent = originalIcon;
+                        copyText.textContent = originalText;
+                    }, 3000);
+                }).catch(err => {
+                    console.error('Clipboard API failed:', err);
+                    fallbackCopyTextToClipboard(text, copyIcon, copyText);
+                });
+            } else {
+                // Fallback for older browsers
+                fallbackCopyTextToClipboard(text, copyIcon, copyText);
+            }
+        });
+    }
+    
+    // Fallback copy method
+    function fallbackCopyTextToClipboard(text, copyIcon, copyText) {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        
+        // Avoid scrolling to bottom
+        textArea.style.top = "0";
+        textArea.style.left = "0";
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                const originalIcon = copyIcon.textContent;
+                const originalText = copyText.textContent;
+                
+                copyIcon.textContent = '✓';
+                copyText.textContent = '已复制!';
+                
+                setTimeout(() => {
+                    copyIcon.textContent = originalIcon;
+                    copyText.textContent = originalText;
+                }, 3000);
+            } else {
+                throw new Error('execCommand failed');
+            }
+        } catch (err) {
+            console.error('Fallback copy failed:', err);
+            // Show the text for manual copy
+            alert(`复制失败，请手动复制以下密钥：\n\n${text}`);
+        }
+        
+        document.body.removeChild(textArea);
+    }
+}
+
+async function showKeyInfo(keyId) {
+    try {
+        const response = await fetch(`/admin/api-keys/${keyId}`);
+        const keyData = await response.json();
+        
+        if (response.ok) {
+            const content = document.getElementById('keyDetailsContent');
+            content.innerHTML = `
+                <div class="key-info-container">
+                    <div class="alert alert-warning">
+                        <strong>🔐 安全提示：</strong> 完整API密钥仅在创建时显示一次，此处只显示前缀用于识别。
+                    </div>
+                    
+                    <div class="key-full-info">
+                        <div class="key-id-section">
+                            <label class="form-label">密钥ID</label>
+                            <div class="copyable-field">
+                                <code class="key-id">${keyData.id}</code>
+                                <button class="btn-copy copy-btn" data-copy="${keyData.id}">
+                                    <span class="copy-icon">📋</span>
+                                    <span class="copy-text">复制ID</span>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="key-display-section">
+                            <label class="form-label">密钥前缀</label>
+                            <code class="key-prefix-display">${keyData.key_prefix}***</code>
+                            <span class="key-security-notice">完整密钥已隐藏</span>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2">
+                        <div>
+                            <label class="form-label">名称</label>
+                            <p>${keyData.name}</p>
+                        </div>
+                        <div>
+                            <label class="form-label">状态</label>
+                            <p><span class="status ${keyData.is_active ? 'status-active' : 'status-inactive'}">${keyData.is_active ? '活跃' : '已禁用'}</span></p>
+                        </div>
+                        <div>
+                            <label class="form-label">Token使用</label>
+                            <p>${keyData.token_used.toLocaleString()} / ${keyData.token_limit.toLocaleString()} (${keyData.usage_percentage}%)</p>
+                        </div>
+                        <div>
+                            <label class="form-label">请求次数</label>
+                            <p>${keyData.request_count}</p>
+                        </div>
+                        <div>
+                            <label class="form-label">错误次数</label>
+                            <p>${keyData.error_count}</p>
+                        </div>
+                        <div>
+                            <label class="form-label">限流等级</label>
+                            <p><span class="tier-badge tier-${keyData.rate_limit_tier}">${keyData.rate_limit_tier}</span></p>
+                        </div>
+                        <div>
+                            <label class="form-label">创建时间</label>
+                            <p>${new Date(keyData.created_at).toLocaleString('zh-CN')}</p>
+                        </div>
+                        <div>
+                            <label class="form-label">最后使用</label>
+                            <p>${keyData.last_used_at ? new Date(keyData.last_used_at).toLocaleString('zh-CN') : '从未使用'}</p>
+                        </div>
+                    </div>
+                    ${keyData.description ? `<div class="form-group"><label class="form-label">描述</label><p>${keyData.description}</p></div>` : ''}
+                </div>
+            `;
+            
+            keyDetailsModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            
+            // Setup copy functionality for the modal
+            const modalCopyBtns = keyDetailsModal.querySelectorAll('.copy-btn');
+            modalCopyBtns.forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const text = this.dataset.copy;
+                    const copyIcon = this.querySelector('.copy-icon');
+                    const copyText = this.querySelector('.copy-text');
+                    
+                    if (text) {
+                        navigator.clipboard.writeText(text).then(() => {
+                            const originalIcon = copyIcon.textContent;
+                            const originalText = copyText.textContent;
+                            
+                            this.classList.add('copied');
+                            copyIcon.textContent = '✓';
+                            copyText.textContent = '已复制';
+                            
+                            setTimeout(() => {
+                                this.classList.remove('copied');
+                                copyIcon.textContent = originalIcon;
+                                copyText.textContent = originalText;
+                            }, 2000);
+                        });
+                    }
+                });
+            });
+        }
+    } catch (error) {
+        alert('获取密钥详情失败');
+    }
+}
+
+// Keep the old function name for compatibility  
+async function viewKeyDetails(keyId) {
+    return showKeyInfo(keyId);
+}
+
+async function toggleKeyStatus(keyId, enable) {
+    const action = enable ? 'enable' : 'disable';
+    const actionText = enable ? '启用' : '禁用';
+    
+    try {
+        const response = await fetch(`/admin/api-keys/${keyId}/${action}`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            window.claudeRelay.showAlert(`密钥${actionText}成功`, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            window.claudeRelay.showAlert(`${actionText}失败`, 'error');
+        }
+    } catch (error) {
+        window.claudeRelay.showAlert('操作失败', 'error');
+    }
+}
+
+function confirmDeleteKey(keyId, keyName) {
+    if (confirm(`确定要删除密钥 "${keyName}" 吗？此操作不可撤销。`)) {
+        deleteKey(keyId);
+    }
+}
+
+async function deleteKey(keyId) {
+    try {
+        const response = await fetch(`/admin/api-keys/${keyId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            window.claudeRelay.showAlert('密钥删除成功', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            window.claudeRelay.showAlert('删除失败', 'error');
+        }
+    } catch (error) {
+        window.claudeRelay.showAlert('删除失败', 'error');
+    }
+}
+
+function filterKeys() {
+    const statusFilter = document.getElementById('statusFilter').value;
+    const tierFilter = document.getElementById('tierFilter').value;
+    const usageFilter = document.getElementById('usageFilter').value;
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    
+    const rows = document.querySelectorAll('.key-row');
+    
+    rows.forEach(row => {
+        let show = true;
+        
+        // Status filter
+        if (statusFilter && row.dataset.status !== statusFilter) {
+            show = false;
+        }
+        
+        // Tier filter
+        if (tierFilter && row.dataset.tier !== tierFilter) {
+            show = false;
+        }
+        
+        // Usage filter
+        if (usageFilter) {
+            const usage = parseFloat(row.dataset.usage);
+            if (usageFilter === 'high' && usage <= 80) show = false;
+            if (usageFilter === 'medium' && (usage <= 20 || usage > 80)) show = false;
+            if (usageFilter === 'low' && usage > 20) show = false;
+        }
+        
+        // Search filter
+        if (searchTerm) {
+            const text = row.textContent.toLowerCase();
+            if (!text.includes(searchTerm)) {
+                show = false;
+            }
+        }
+        
+        row.style.display = show ? '' : 'none';
+    });
+}
+
+function refreshKeys() {
+    location.reload();
+}
+
+function exportKeys() {
+    // Simple CSV export
+    const table = document.getElementById('keysTable');
+    const rows = Array.from(table.querySelectorAll('tr'));
+    
+    const csv = rows.map(row => {
+        const cells = Array.from(row.querySelectorAll('th, td'));
+        return cells.slice(0, -1).map(cell => {  // Exclude actions column
+            const text = cell.textContent.trim().replace(/\s+/g, ' ');
+            return `"${text.replace(/"/g, '""')}"`;
+        }).join(',');
+    }).join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `api-keys-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    window.claudeRelay.showAlert('密钥数据已导出', 'success');
+}
+
+// Close modals when clicking outside
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('modal')) {
+        e.target.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+});
+</script>
+{% endblock %}

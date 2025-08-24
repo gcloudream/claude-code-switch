@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block body_class %}dashboard stats{% endblock %}
+
+{% block nav %}
+<a href="/dashboard">概览</a>
+<a href="/dashboard/stats" class="active">统计</a>
+<a href="/dashboard/logs">日志</a>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>使用统计</h2>
+    <p class="text-muted">API密钥: <code>{{ api_key.key_prefix }}***</code></p>
+</div>
+
+<!-- Summary Cards -->
+<div class="grid grid-cols-4 mb-lg">
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_requests or 0 }}</div>
+        <div class="stat-label">总请求数</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-value">{{ (stats.total_tokens or 0) | format_number }}</div>
+        <div class="stat-label">总Token数</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-value">{{ (stats.avg_response_time_ms or 0) | round }}ms</div>
+        <div class="stat-label">平均响应时间</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-value">{{ (stats.error_rate or 0) | round(1) }}%</div>
+        <div class="stat-label">错误率</div>
+    </div>
+</div>
+
+<div class="grid grid-cols-2">
+    <!-- Usage Trend Chart -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">30天使用趋势</h3>
+        </div>
+        <div class="chart-container" style="height: 300px;">
+            <canvas id="usageTrendChart"></canvas>
+        </div>
+    </div>
+    
+    <!-- Model Usage Distribution -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">模型使用分布</h3>
+        </div>
+        <div class="chart-container" style="height: 300px;">
+            <canvas id="modelUsageChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Token Usage Details -->
+<div class="card mb-lg">
+    <div class="card-header">
+        <h3 class="card-title">Token使用详情</h3>
+    </div>
+    
+    <div class="grid grid-cols-3">
+        <div class="text-center">
+            <div class="stat-value text-primary">{{ (stats.total_prompt_tokens or 0) | format_number }}</div>
+            <div class="stat-label">Prompt Tokens</div>
+            <div class="progress mt-sm">
+                <div class="progress-bar" style="width: {{ ((stats.total_prompt_tokens or 0) / (stats.total_tokens or 1) * 100) | round }}%"></div>
+            </div>
+        </div>
+        
+        <div class="text-center">
+            <div class="stat-value text-success">{{ (stats.total_completion_tokens or 0) | format_number }}</div>
+            <div class="stat-label">Completion Tokens</div>
+            <div class="progress mt-sm">
+                <div class="progress-bar" style="width: {{ ((stats.total_completion_tokens or 0) / (stats.total_tokens or 1) * 100) | round }}%; background: var(--success)"></div>
+            </div>
+        </div>
+        
+        <div class="text-center">
+            <div class="stat-value">{{ (stats.total_tokens or 0) | format_number }}</div>
+            <div class="stat-label">总计</div>
+            <div class="progress mt-sm">
+                <div class="progress-bar" style="width: 100%"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Error Analysis -->
+{% if stats.error_count > 0 %}
+<div class="card mb-lg">
+    <div class="card-header">
+        <h3 class="card-title">错误分析</h3>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>错误类型</th>
+                    <th>次数</th>
+                    <th>占比</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for error in stats.error_breakdown %}
+                <tr>
+                    <td>{{ error.error_code or '未知错误' }}</td>
+                    <td>{{ error.count }}</td>
+                    <td>{{ (error.count / stats.error_count * 100) | round(1) }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Model Usage Details -->
+{% if stats.model_usage %}
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">模型使用详情</h3>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>模型</th>
+                    <th>请求数</th>
+                    <th>Token数</th>
+                    <th>成本</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for model in stats.model_usage %}
+                <tr>
+                    <td>{{ model.model or 'claude-3-5-sonnet-20241022' }}</td>
+                    <td>{{ model.requests }}</td>
+                    <td>{{ model.tokens | format_number }}</td>
+                    <td>${{ "%.4f" | format(model.cost) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.page-header {
+    margin-bottom: var(--spacing-xl);
+}
+
+.page-header h2 {
+    margin-bottom: var(--spacing-sm);
+}
+
+.chart-container {
+    position: relative;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-primary {
+    color: var(--accent-primary);
+}
+
+.table-responsive {
+    overflow-x: auto;
+}
+
+@media (max-width: 768px) {
+    .grid-cols-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .grid-cols-2,
+    .grid-cols-3 {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Usage trend chart data
+    const dailyUsage = {{ daily_usage | tojson }};
+    const trendData = {
+        labels: dailyUsage.map(day => {
+            const date = new Date(day.date);
+            return (date.getMonth() + 1) + '/' + date.getDate();
+        }),
+        values: dailyUsage.map(day => day.tokens)
+    };
+    
+    window.claudeRelay.createUsageChart('usageTrendChart', trendData);
+    
+    // Model usage chart data
+    const modelUsage = {{ stats.model_usage | tojson }};
+    if (modelUsage && modelUsage.length > 0) {
+        const modelData = {
+            labels: modelUsage.map(model => model.model || 'claude-3.5-sonnet'),
+            values: modelUsage.map(model => model.tokens)
+        };
+        
+        window.claudeRelay.createModelUsageChart('modelUsageChart', modelData);
+    }
+});
+</script>
+{% endblock %}

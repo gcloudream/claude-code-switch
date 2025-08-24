@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(python3 -m pip install:*)",
+      "Bash(docker:*)",
+      "Bash(curl:*)",
+      "Bash(ufw:*)",
+      "Bash(psql:*)",
+      "Bash(export UPSTREAM_API_URL=\"https://asia.qcode.cc/api\")",
+      "Bash(set -a)",
+      "Bash(source .env)",
+      "Bash(set +a)",
+      "Bash(uvicorn:*)",
+      "Bash(kill:*)",
+      "Bash(/usr/bin/python3:*)",
+      "Bash(pip install:*)",
+      "Bash(cat:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

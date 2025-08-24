@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block body_class %}dashboard{% endblock %}
+
+{% block nav %}
+<a href="/dashboard" class="active">概览</a>
+<a href="/dashboard/stats">统计</a>
+<a href="/dashboard/logs">日志</a>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>欢迎使用 Claude API 中转站</h2>
+    <p class="text-muted">API密钥: <code>{{ api_key.key_prefix }}***</code></p>
+</div>
+
+<!-- Overview Stats -->
+<div class="grid grid-cols-4 mb-lg">
+    <div class="stat-card">
+        <div class="stat-value">{{ api_key.usage_percentage }}%</div>
+        <div class="stat-label">使用率</div>
+        <div class="progress mt-sm">
+            <div class="progress-bar" style="width: {{ api_key.usage_percentage }}%"></div>
+        </div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_requests or 0 }}</div>
+        <div class="stat-label">总请求数</div>
+        <div class="stat-change positive">+12% 本月</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-value">{{ (stats.total_tokens or 0) | format_number }}</div>
+        <div class="stat-label">Token使用量</div>
+        <div class="stat-change positive">+{{ ((stats.total_tokens or 0) / (api_key.token_limit or 1) * 100) | round(1) }}%</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-value">{{ (stats.avg_response_time_ms or 0) | round }}ms</div>
+        <div class="stat-label">平均响应时间</div>
+        <div class="stat-change positive">-5% 本周</div>
+    </div>
+</div>
+
+<!-- Quota Status Card -->
+<div class="card mb-lg">
+    <div class="card-header">
+        <h3 class="card-title">配额状态</h3>
+        <div class="status {% if api_key.is_active %}status-active{% else %}status-inactive{% endif %}">
+            {% if api_key.is_active %}活跃{% else %}已停用{% endif %}
+        </div>
+    </div>
+    
+    <div class="grid grid-cols-2">
+        <div>
+            <div class="mb-md">
+                <label class="form-label">Token限制</label>
+                <p class="text-lg">{{ api_key.token_limit | format_number }}</p>
+            </div>
+            
+            <div class="mb-md">
+                <label class="form-label">已使用</label>
+                <p class="text-lg">{{ api_key.token_used | format_number }}</p>
+            </div>
+            
+            <div>
+                <label class="form-label">剩余</label>
+                <p class="text-lg text-success">{{ api_key.token_remaining | format_number }}</p>
+            </div>
+        </div>
+        
+        <div>
+            <div class="mb-md">
+                <label class="form-label">限流等级</label>
+                <p class="text-lg">{{ api_key.rate_limit_tier | title }}</p>
+            </div>
+            
+            <div class="mb-md">
+                <label class="form-label">创建时间</label>
+                <p class="text-sm text-muted">{{ api_key.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+            </div>
+            
+            {% if api_key.expires_at %}
+            <div>
+                <label class="form-label">过期时间</label>
+                <p class="text-sm text-warning">{{ api_key.expires_at.strftime('%Y-%m-%d %H:%M') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Usage Trend Chart -->
+<div class="card mb-lg">
+    <div class="card-header">
+        <h3 class="card-title">近7天使用趋势</h3>
+    </div>
+    
+    <div class="chart-container" style="height: 300px;">
+        <canvas id="usageChart"></canvas>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">最近活动</h3>
+        <a href="/dashboard/logs" class="btn btn-secondary btn-sm">查看全部</a>
+    </div>
+    
+    {% if stats.total_requests > 0 %}
+    <div class="activity-list">
+        <div class="activity-item">
+            <div class="activity-icon">
+                <span class="status-active">✓</span>
+            </div>
+            <div class="activity-content">
+                <p>API密钥创建成功</p>
+                <p class="text-sm text-muted">{{ api_key.created_at.strftime('%m-%d %H:%M') }}</p>
+            </div>
+        </div>
+        
+        {% if api_key.last_used_at %}
+        <div class="activity-item">
+            <div class="activity-icon">
+                <span class="status-active">↗</span>
+            </div>
+            <div class="activity-content">
+                <p>最近API调用</p>
+                <p class="text-sm text-muted">{{ api_key.last_used_at.strftime('%m-%d %H:%M') }}</p>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if stats.error_count > 0 %}
+        <div class="activity-item">
+            <div class="activity-icon">
+                <span class="status-error">!</span>
+            </div>
+            <div class="activity-content">
+                <p>检测到 {{ stats.error_count }} 个错误</p>
+                <p class="text-sm text-muted">错误率: {{ stats.error_rate }}%</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p class="text-muted">暂无使用记录</p>
+        <p class="text-sm text-muted">开始使用API后，活动记录将在此显示</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.dashboard-header {
+    margin-bottom: var(--spacing-xl);
+}
+
+.dashboard-header h2 {
+    margin-bottom: var(--spacing-sm);
+}
+
+.activity-list {
+    padding: 0;
+}
+
+.activity-item {
+    display: flex;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md) 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+}
+
+.activity-content {
+    flex: 1;
+}
+
+.activity-content p:last-child {
+    margin: 0;
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-xl);
+}
+
+.text-lg {
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.text-sm {
+    font-size: 0.875rem;
+}
+
+.text-muted {
+    color: var(--text-muted);
+}
+
+.text-success {
+    color: var(--success);
+}
+
+.text-warning {
+    color: var(--warning);
+}
+
+.chart-container {
+    position: relative;
+}
+
+@media (max-width: 768px) {
+    .grid-cols-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .grid-cols-4 {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Create usage trend chart
+    const dailyUsage = {{ daily_usage | tojson }};
+    const chartData = {
+        labels: dailyUsage.map(day => {
+            const date = new Date(day.date);
+            return date.getMonth() + 1 + '/' + date.getDate();
+        }),
+        values: dailyUsage.map(day => day.tokens)
+    };
+    
+    window.claudeRelay.createUsageChart('usageChart', chartData);
+});
+</script>
+{% endblock %}

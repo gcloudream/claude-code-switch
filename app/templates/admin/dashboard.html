@@ -1,0 +1,530 @@
+{% extends "base.html" %}
+
+{% block body_class %}admin dashboard{% endblock %}
+
+{% block nav %}
+<a href="/admin/dashboard" class="active">概览</a>
+<a href="/admin/keys">密钥管理</a>
+<a href="/admin/logout" class="logout-btn">退出登录</a>
+{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h2>管理员仪表板</h2>
+    <p class="text-muted">欢迎回来，{{ admin_user }}</p>
+</div>
+
+<!-- System Stats -->
+<div class="grid grid-cols-4 mb-lg">
+    <div class="stat-card">
+        <div class="stat-value">{{ total_keys }}</div>
+        <div class="stat-label">总密钥数</div>
+        <div class="stat-change positive">+{{ active_keys }}/{{ total_keys }} 活跃</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-value">{{ active_keys }}</div>
+        <div class="stat-label">活跃密钥</div>
+        <div class="stat-change">{{ "%.1f" | format(active_keys / (total_keys or 1) * 100) }}% 活跃率</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-value">{{ total_requests | format_number }}</div>
+        <div class="stat-label">总请求数</div>
+        <div class="stat-change positive">本月统计</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-value">{{ total_tokens | format_number }}</div>
+        <div class="stat-label">总Token数</div>
+        <div class="stat-change positive">累计消耗</div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card mb-lg">
+    <div class="card-header">
+        <h3 class="card-title">快速操作</h3>
+    </div>
+    
+    <div class="quick-actions">
+        <button class="btn btn-primary" onclick="showCreateKeyModal()">
+            <span class="icon">+</span>
+            创建新密钥
+        </button>
+        <a href="/admin/keys" class="btn btn-secondary">
+            <span class="icon">🔑</span>
+            管理密钥
+        </a>
+        <a href="/admin/logs" class="btn btn-secondary">
+            <span class="icon">📊</span>
+            查看日志
+        </a>
+        <button class="btn btn-secondary" onclick="refreshStats()">
+            <span class="icon">🔄</span>
+            刷新数据
+        </button>
+    </div>
+</div>
+
+<!-- System Health -->
+<div class="grid grid-cols-2">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">系统状态</h3>
+            <span class="status status-active">正常运行</span>
+        </div>
+        
+        <div class="system-metrics">
+            <div class="metric">
+                <span class="metric-label">数据库</span>
+                <span class="metric-value status-active">正常</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">缓存</span>
+                <span class="metric-value status-active">正常</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">上游API</span>
+                <span class="metric-value status-active">正常</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">运行时间</span>
+                <span class="metric-value">24小时7分钟</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">最近活动</h3>
+        </div>
+        
+        <div class="activity-list">
+            <div class="activity-item">
+                <div class="activity-icon">
+                    <span class="status-active">+</span>
+                </div>
+                <div class="activity-content">
+                    <p>新密钥创建</p>
+                    <p class="text-sm text-muted">2分钟前</p>
+                </div>
+            </div>
+            
+            <div class="activity-item">
+                <div class="activity-icon">
+                    <span class="status-warning">⚠</span>
+                </div>
+                <div class="activity-content">
+                    <p>高频率请求检测</p>
+                    <p class="text-sm text-muted">15分钟前</p>
+                </div>
+            </div>
+            
+            <div class="activity-item">
+                <div class="activity-icon">
+                    <span class="status-active">✓</span>
+                </div>
+                <div class="activity-content">
+                    <p>系统健康检查通过</p>
+                    <p class="text-sm text-muted">1小时前</p>
+                </div>
+            </div>
+            
+            <div class="activity-item">
+                <div class="activity-icon">
+                    <span class="status-active">🔄</span>
+                </div>
+                <div class="activity-content">
+                    <p>数据库备份完成</p>
+                    <p class="text-sm text-muted">6小时前</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create API Key Modal -->
+<div id="createKeyModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>创建新API密钥</h3>
+            <button class="modal-close" onclick="closeCreateKeyModal()">&times;</button>
+        </div>
+        
+        <form id="createKeyForm" class="modal-body">
+            <div class="form-group">
+                <label class="form-label">密钥名称 *</label>
+                <input type="text" name="name" class="form-input" 
+                       placeholder="例如：用户John的密钥" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">描述</label>
+                <textarea name="description" class="form-input" rows="3" 
+                         placeholder="密钥的用途描述（可选）"></textarea>
+            </div>
+            
+            <div class="grid grid-cols-2">
+                <div class="form-group">
+                    <label class="form-label">Token限制</label>
+                    <input type="number" name="token_limit" class="form-input" 
+                           value="1000000" min="1000" step="1000">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">限流等级</label>
+                    <select name="rate_limit_tier" class="form-input">
+                        <option value="basic">基础 (100请求/分钟)</option>
+                        <option value="premium">高级 (500请求/分钟)</option>
+                        <option value="unlimited">无限制</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">有效期（天）</label>
+                <input type="number" name="expires_in_days" class="form-input" 
+                       placeholder="留空为永久有效" min="1" max="365">
+            </div>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeCreateKeyModal()">
+                    取消
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    创建密钥
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.admin-header {
+    margin-bottom: var(--spacing-xl);
+}
+
+.admin-header h2 {
+    margin-bottom: var(--spacing-sm);
+}
+
+.quick-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
+}
+
+.quick-actions .btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.quick-actions .icon {
+    font-size: 1.2em;
+}
+
+.system-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.metric:last-child {
+    border-bottom: none;
+}
+
+.metric-label {
+    color: var(--text-secondary);
+}
+
+.metric-value {
+    font-weight: 600;
+}
+
+.activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.activity-item {
+    display: flex;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md) 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+}
+
+.activity-content {
+    flex: 1;
+}
+
+.activity-content p:last-child {
+    margin: 0;
+}
+
+.logout-btn {
+    color: var(--error) !important;
+}
+
+.logout-btn:hover {
+    background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+    margin: 0;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-close:hover {
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: var(--spacing-lg);
+}
+
+.modal-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: flex-end;
+    margin-top: var(--spacing-lg);
+}
+
+.status-warning {
+    color: var(--warning);
+}
+
+@media (max-width: 768px) {
+    .grid-cols-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .grid-cols-2 {
+        grid-template-columns: 1fr;
+    }
+    
+    .quick-actions {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .grid-cols-4 {
+        grid-template-columns: 1fr;
+    }
+    
+    .quick-actions .btn {
+        flex: 1;
+        justify-content: center;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let createKeyModal;
+
+document.addEventListener('DOMContentLoaded', function() {
+    createKeyModal = document.getElementById('createKeyModal');
+    
+    // Setup create key form
+    const form = document.getElementById('createKeyForm');
+    form.addEventListener('submit', handleCreateKey);
+});
+
+function showCreateKeyModal() {
+    createKeyModal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeCreateKeyModal() {
+    createKeyModal.style.display = 'none';
+    document.body.style.overflow = 'auto';
+    document.getElementById('createKeyForm').reset();
+}
+
+async function handleCreateKey(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData.entries());
+    
+    // Convert numeric fields
+    if (data.token_limit) data.token_limit = parseInt(data.token_limit);
+    if (data.expires_in_days) data.expires_in_days = parseInt(data.expires_in_days);
+    
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="loading"></span> 创建中...';
+    
+    try {
+        const response = await fetch('/admin/api-keys', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            window.claudeRelay.showAlert('密钥创建成功！', 'success');
+            closeCreateKeyModal();
+            
+            // Show the created API key
+            showApiKeyResult(result);
+            
+            // Refresh page after a delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 3000);
+        } else {
+            window.claudeRelay.showAlert(result.detail || '创建失败', 'error');
+        }
+    } catch (error) {
+        console.error('Error creating API key:', error);
+        window.claudeRelay.showAlert('网络错误，请重试', 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+    }
+}
+
+function showApiKeyResult(keyData) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+    
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>API密钥创建成功</h3>
+                <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-success">
+                    密钥创建成功！请妥善保存以下信息，密钥只会显示这一次。
+                </div>
+                <div class="form-group">
+                    <label class="form-label">API密钥</label>
+                    <div class="api-key-display">
+                        <input type="text" value="${keyData.api_key}" readonly class="form-input">
+                        <button class="btn btn-secondary copy-btn" data-copy="${keyData.api_key}">
+                            复制
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">密钥ID</label>
+                    <code>${keyData.id}</code>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">名称</label>
+                    <p>${keyData.name}</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+}
+
+async function refreshStats() {
+    const btn = event.target;
+    const originalText = btn.textContent;
+    
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading"></span> 刷新中...';
+    
+    setTimeout(() => {
+        window.location.reload();
+    }, 1000);
+}
+
+// Close modal when clicking outside
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('modal')) {
+        e.target.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+});
+</script>
+{% endblock %}

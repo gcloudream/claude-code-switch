@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  relay-station:
+    build: .
+    container_name: relay-station
+    environment:
+      # Application
+      APP_ENV: production
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      
+      # Database (External PostgreSQL Container)
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@host.docker.internal:15432/relay_station
+      
+      # Redis (External Redis Container)
+      REDIS_URL: redis://:123456@host.docker.internal:16379/0
+      
+      # Upstream API
+      UPSTREAM_API_URL: https://asia.qcode.cc/api
+      UPSTREAM_API_KEY: cr_805714aae27140877ec2560c7e73ffad4a142c6d9e5a9f282f4688c2d7310ac8
+      
+      # Admin
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: chen
+      
+      # Security
+      SECRET_KEY: 123666
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

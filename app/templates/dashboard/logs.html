@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+
+{% block body_class %}dashboard logs{% endblock %}
+
+{% block nav %}
+<a href="/dashboard">概览</a>
+<a href="/dashboard/stats">统计</a>
+<a href="/dashboard/logs" class="active">日志</a>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>使用日志</h2>
+    <p class="text-muted">API密钥: <code>{{ api_key.key_prefix }}***</code></p>
+</div>
+
+<!-- Filters -->
+<div class="card mb-lg">
+    <div class="card-header">
+        <h3 class="card-title">筛选条件</h3>
+    </div>
+    
+    <form class="log-filters" method="get">
+        <div class="grid grid-cols-4">
+            <div class="form-group">
+                <label class="form-label">状态</label>
+                <select name="status" class="form-input">
+                    <option value="">全部</option>
+                    <option value="200">成功 (200)</option>
+                    <option value="400">客户端错误 (4xx)</option>
+                    <option value="500">服务器错误 (5xx)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">时间范围</label>
+                <select name="timerange" class="form-input">
+                    <option value="">全部</option>
+                    <option value="1h">最近1小时</option>
+                    <option value="24h">最近24小时</option>
+                    <option value="7d">最近7天</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">模型</label>
+                <select name="model" class="form-input">
+                    <option value="">全部模型</option>
+                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                    <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                    <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">筛选</button>
+                <a href="/dashboard/logs" class="btn btn-secondary">重置</a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Logs Table -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">请求日志</h3>
+        {% if logs %}
+        <div class="card-actions">
+            <button class="btn btn-secondary btn-sm" onclick="exportLogs()">导出CSV</button>
+        </div>
+        {% endif %}
+    </div>
+    
+    {% if logs %}
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>时间</th>
+                    <th>方法</th>
+                    <th>路径</th>
+                    <th>状态</th>
+                    <th>响应时间</th>
+                    <th>Token</th>
+                    <th>模型</th>
+                    <th>成本</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr class="log-row {% if log.is_error %}error{% endif %}">
+                    <td>
+                        <span class="timestamp" title="{{ log.created_at.isoformat() }}">
+                            {{ log.created_at.strftime('%m-%d %H:%M:%S') }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="http-method method-{{ log.request_method.lower() }}">
+                            {{ log.request_method }}
+                        </span>
+                    </td>
+                    <td>
+                        <code class="request-path">{{ log.request_path }}</code>
+                    </td>
+                    <td>
+                        <span class="status status-{{ log.response_status // 100 }}xx">
+                            {{ log.response_status }}
+                        </span>
+                        {% if log.is_error and log.error_message %}
+                        <div class="error-details">
+                            <small class="text-muted">{{ log.error_message[:100] }}{% if log.error_message|length > 100 %}...{% endif %}</small>
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="response-time">{{ "%.0f" | format(log.response_time_ms) }}ms</span>
+                    </td>
+                    <td>
+                        <div class="token-info">
+                            <div class="token-total">{{ log.total_tokens }}</div>
+                            <small class="text-muted">{{ log.prompt_tokens }}/{{ log.completion_tokens }}</small>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="model-name">{{ log.model or 'claude-3.5-sonnet' }}</span>
+                    </td>
+                    <td>
+                        <span class="cost">${{ "%.4f" | format(log.total_cost) }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    <div class="pagination-wrapper">
+        <div class="pagination">
+            {% if current_page > 1 %}
+            <a href="/dashboard/logs?page={{ current_page - 1 }}" class="btn btn-secondary btn-sm">上一页</a>
+            {% endif %}
+            
+            <span class="page-info">第 {{ current_page }} 页</span>
+            
+            {% if logs|length == 50 %}
+            <a href="/dashboard/logs?page={{ current_page + 1 }}" class="btn btn-secondary btn-sm">下一页</a>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p class="text-muted">暂无日志记录</p>
+        <p class="text-sm text-muted">开始使用API后，请求日志将在此显示</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.page-header {
+    margin-bottom: var(--spacing-xl);
+}
+
+.page-header h2 {
+    margin-bottom: var(--spacing-sm);
+}
+
+.log-filters .grid {
+    align-items: end;
+}
+
+.log-row.error {
+    background-color: rgba(239, 68, 68, 0.05);
+    border-left: 3px solid var(--error);
+}
+
+.http-method {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.method-get { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+.method-post { background: rgba(59, 130, 246, 0.1); color: #60a5fa; }
+.method-put { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+.method-delete { background: rgba(239, 68, 68, 0.1); color: var(--error); }
+
+.status {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-2xx { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+.status-4xx { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+.status-5xx { background: rgba(239, 68, 68, 0.1); color: var(--error); }
+
+.request-path {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    background: var(--bg-tertiary);
+    padding: 2px 4px;
+    border-radius: var(--radius-sm);
+}
+
+.response-time {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+}
+
+.token-info {
+    text-align: right;
+}
+
+.token-total {
+    font-weight: 600;
+}
+
+.model-name {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    background: var(--bg-tertiary);
+    padding: 2px 4px;
+    border-radius: var(--radius-sm);
+}
+
+.cost {
+    font-family: var(--font-mono);
+    font-weight: 600;
+}
+
+.error-details {
+    margin-top: 2px;
+}
+
+.pagination-wrapper {
+    padding: var(--spacing-md);
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: center;
+}
+
+.pagination {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+}
+
+.page-info {
+    padding: 0 var(--spacing-md);
+    color: var(--text-secondary);
+}
+
+.card-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-2xl);
+}
+
+.timestamp {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+}
+
+@media (max-width: 768px) {
+    .table {
+        font-size: 0.75rem;
+    }
+    
+    .table th,
+    .table td {
+        padding: var(--spacing-sm);
+    }
+    
+    .grid-cols-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .grid-cols-4 {
+        grid-template-columns: 1fr;
+    }
+    
+    .table-responsive {
+        overflow-x: auto;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function exportLogs() {
+    // Simple CSV export functionality
+    const table = document.querySelector('.table');
+    const rows = Array.from(table.querySelectorAll('tr'));
+    
+    const csv = rows.map(row => {
+        const cells = Array.from(row.querySelectorAll('th, td'));
+        return cells.map(cell => {
+            const text = cell.textContent.trim().replace(/\s+/g, ' ');
+            return `"${text.replace(/"/g, '""')}"`;
+        }).join(',');
+    }).join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `api-logs-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    window.claudeRelay.showAlert('日志已导出到CSV文件', 'success');
+}
+
+// Auto-refresh functionality
+let autoRefresh = false;
+let refreshInterval;
+
+function toggleAutoRefresh() {
+    autoRefresh = !autoRefresh;
+    const button = document.querySelector('.auto-refresh-btn');
+    
+    if (autoRefresh) {
+        button.textContent = '停止刷新';
+        button.classList.add('btn-warning');
+        refreshInterval = setInterval(() => {
+            window.location.reload();
+        }, 30000); // Refresh every 30 seconds
+    } else {
+        button.textContent = '自动刷新';
+        button.classList.remove('btn-warning');
+        clearInterval(refreshInterval);
+    }
+}
+</script>
+{% endblock %}
